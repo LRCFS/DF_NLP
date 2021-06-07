@@ -128,6 +128,40 @@ def extract(json_path: str) -> Corpus:
     } for ref in tqdm(raw)}
 
 
+def summary(corpus: Corpus) -> None:
+    """Print quantitative information about `corpus`.
+
+    Args:
+        corpus: Corpus of references.
+    """
+    s = {
+        "total": len(corpus),
+        "abstract": 0,
+        "p_abstract": 0.0,
+        "text": 0,
+        "p_text": 0.0
+    }
+
+    for v in corpus.values():
+        if v.get("abstract", ""):
+            s["abstract"] += 1
+        if v.get("full_text", ""):
+            s["text"] += 1
+
+    s["p_abstract"] = 100 * (s.get("abstract") / s.get("total"))
+    s["p_text"] = 100 * (s.get("text") / s.get("total"))
+
+    long_str = ("\n=============== Summary ===============\n\n"
+                + f"Total of references: {s.get('total')}\n"
+                + f"References with abstract: {s.get('abstract')}"
+                + f" ({round(s.get('p_abstract'), 2)}%)\n"
+                + f"References with full text: {s.get('text')}"
+                + f" ({round(s.get('p_text'), 2)}%)\n\n"
+                + "=======================================")
+
+    print(long_str)
+
+
 if __name__ == "__main__":
     # Test the number of arguments
     if len(sys.argv) != 2:
