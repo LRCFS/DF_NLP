@@ -64,12 +64,15 @@ def _process_elsevier_section(section: ET.Element, text: str) -> str:
     return text
 
 
-def process_elsevier(answer: str, path: str) -> None:
+def process_elsevier(answer: str, path: str) -> str:
     """Extract text content from the Elsevier answer.
 
     Args:
         answer: Raw Elsevier XML answer as string.
         path: Path where to write the resulting file.
+
+    Returns:
+        Processed Springer XML answer as string.
 
     Raises:
         NameError: Full text is unavailable.
@@ -106,6 +109,8 @@ def process_elsevier(answer: str, path: str) -> None:
                 f.write(f"{_process_elsevier_section(child, text)}\n")
         else:
             raise ValueError(f"Unknown root tag: {child.tag}")
+
+    return answer
 
 
 def get_elsevier_abstract(answer: str) -> str:
@@ -179,12 +184,15 @@ def _process_springer_section(section: ET.Element, text: str) -> str:
     return text
 
 
-def process_springer(answer: str, path: str) -> None:
+def process_springer(answer: str, path: str) -> str:
     """Extract text content from the Springer answer.
 
     Args:
         answer: Raw Springer XML answer as string.
         path: Path where to write the resulting file.
+
+    Returns:
+        Processed Springer XML answer as string.
 
     Raises:
         NameError: Full text is unavailable.
@@ -207,6 +215,7 @@ def process_springer(answer: str, path: str) -> None:
     answer = re.sub("</?sub>", "", answer)
     answer = re.sub("<sup>", "^", answer)
     answer = re.sub("</sup>", "", answer)
+    answer = re.sub("\xa0", " ", answer)
 
     root = ET.fromstring(answer)
     root = root.find(".//body")
@@ -225,3 +234,30 @@ def process_springer(answer: str, path: str) -> None:
                 f.write(f"{_process_springer_section(child, text)}\n")
         else:
             raise ValueError(f"Unknown root tag: {child.tag}")
+
+    return answer
+
+
+def get_springer_abstract(answer: str) -> str:
+    """Extract abstract from the Springer answer.
+
+    Args:
+        answer: Raw Springer XML answer as string.
+
+    Returns:
+        Abstract of the reference as string.
+    """
+    root = ET.fromstring(answer)
+    root = root.find("./records/article/front/article-meta/abstract")
+    text = str()
+
+    for child in list(root):
+        # Ignore title which is 'Abstract'
+        if child.tag == "title":
+            continue
+        if child.tag == "sec":
+            text += _process_springer_section(child, text)
+        else:
+            raise ValueError(f"Unknown root tag: {child.tag}")
+
+    return text
