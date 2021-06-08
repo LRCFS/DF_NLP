@@ -1,9 +1,11 @@
 """Module handling requests to API."""
 
-import requests
-import sys
-from typing import Union
 import json
+import sys
+import xml.etree.ElementTree as ET
+from typing import Union
+
+import requests
 
 
 def _get(query: str) -> requests.Response:
@@ -39,7 +41,7 @@ def elsevier_get(doi: str, api_key: str) -> str:
     return _get(query).content.decode("UTF-8")
 
 
-def springer_get(doi: str, api_key: str) -> dict:
+def springer_get(doi: str, api_key: str) -> str:
     """Query information through a DOI to Springer.
 
     Args:
@@ -49,15 +51,16 @@ def springer_get(doi: str, api_key: str) -> dict:
     Returns:
         Springer's API answer as a string.
     """
-    oa_query = ("http://api.springernature.com/openaccess/json/doi/"
+    oa_query = ("http://api.springernature.com/openaccess/jats/doi/"
                 + f"{doi}?api_key={api_key}")
-    oa_resp = _get(oa_query).json()
-    oa_nb_result = int(oa_resp.get("result")[0].get("total"))
+    oa_resp = _get(oa_query).content.decode("UTF-8")
+    root = ET.fromstring(oa_resp)
+    oa_nb_result = int(root.find("./result/total").text)
 
     if not oa_nb_result:
-        meta_query = ("http://api.springernature.com/meta/v2/json?q=doi:"
+        meta_query = ("http://api.springernature.com/meta/v2/jats?q=doi:"
                       + f"{doi}&api_key={api_key}")
-        return _get(meta_query).json()
+        return _get(meta_query).content.decode("UTF-8")
     return oa_resp
 
 

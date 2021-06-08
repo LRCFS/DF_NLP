@@ -123,3 +123,105 @@ def get_elsevier_abstract(answer: str) -> str:
     desc = re.sub("\n +", "", desc)
 
     return desc
+
+
+def _process_springer_para(para: ET.Element) -> str:
+    """Extract text content from a Springer paragraph.
+
+    Args:
+        para: XML element containing a paragraph.
+
+    Returns:
+        Text content of the paragraph.
+
+    Raises:
+        ValueError: Find an unknown subtag in the paragraph.
+    """
+    text = f"{para.text}"
+
+    for child in list(para):
+        if child.tag == "list":
+            items = child.findall(".//p")
+            text += "\n".join([f"- {i.text}" for i in items])
+            text += "\n"
+        else:
+            raise ValueError(f"Unknown para tag: {child.tag}")
+
+    text = re.sub("( *\n *)+", " ", text)
+    text = re.sub("^ ", "", text)
+
+    return text
+
+
+def _process_springer_section(section: ET.Element, text: str) -> str:
+    """Extract text content from a Springer section.
+
+    Args:
+        section: XML element containing a section.
+        text: Text already found in this section.
+
+    Returns:
+        Text content of the section.
+
+    Raises:
+        ValueError: Find an unknown subtag in the section.
+    """
+    for child in list(section):
+        if child.tag == "title":
+            text += f"{child.text}\n"
+        elif child.tag == "p":
+            text += f"{_process_springer_para(child)}\n"
+        elif child.tag == "sec":
+            text = _process_springer_section(child, text)
+        else:
+            raise ValueError(f"Unknown section tag: {child.tag}")
+
+    return text
+
+
+def process_springer(answer: str, path: str) -> None:
+    """Extract text content from the Springer answer.
+
+    Args:
+        answer: Raw Springer XML answer as string.
+        path: Path where to write the resulting file.
+
+    Raises:
+        NameError: Full text is unavailable.
+        ValueError: Find an unknown subtag in the root.
+    """
+    # Remove tags cutting text content
+    answer = re.sub(r'((, )|–)?<xref[- \w="]+>', "", answer)
+    answer = re.sub("</xref>", "", answer)
+    answer = re.sub(r" \[\d+\]", "", answer)
+    # Need to add carriage return...
+    answer = re.sub(">(?=<label>)", ">\n", answer)
+    answer = re.sub("(?<=</label>)<", "\n<", answer)
+    answer = re.sub(">(?=</caption>)", ">\n", answer)
+    answer = re.sub(">(?=<graphic)", ">\n", answer)
+    answer = re.sub(">(?=</fig>)", ">\n", answer)
+    # ...to improve identification & deletion of figure tags
+    answer = re.sub(r'\n<fig[ \w="]+>(\n.+){4}\n</fig>', "", answer)
+    answer = re.sub("</?bold>", "", answer)
+    answer = re.sub("</?italic>", "", answer)
+    answer = re.sub("</?sub>", "", answer)
+    answer = re.sub("<sup>", "^", answer)
+    answer = re.sub("</sup>", "", answer)
+
+    root = ET.fromstring(answer)
+    root = root.find(".//body")
+    text = str()
+
+    if not root:
+        raise NameError("Full text unavailable!")
+
+    # Clear the file
+    with open(path, "w") as f:
+        f.write("")
+
+    for child in list(root):
+        if child.tag == "sec":
+            with open(path, "a+") as f:
+                f.write(f"{_process_springer_section(child, text)}\n")
+        else:
+            raise ValueError(f"Unknown root tag: {child.tag}")
