@@ -1,12 +1,18 @@
-#! usr/bin/env python3
+#!/usr/bin/env python3
 """Module setting up the corpus using a CLS JSON bibliography."""
 
 import json
+import os
 import re
 import sys
-from typing import Dict, List
+import time
+import xml.etree.ElementTree as ET
+from typing import Dict, List, Optional, Tuple
 
 from tqdm import tqdm
+
+import api
+import query
 
 Corpus = Dict[str, Dict[str, str]]
 
@@ -25,7 +31,7 @@ def _search_doi(ref: dict) -> str:
     if ref.get("DOI"):
         doi = ref.get("DOI")
     elif ref.get("note"):
-        pattern = re.compile(r"(?<=DOI: )[-\w./]+")
+        pattern = re.compile(r"(?<=DOI: )[-\w./\(\)]+")
         res = pattern.search(ref.get("note"))
         if res:
             doi = res.group()
@@ -162,11 +168,103 @@ def summary(corpus: Corpus) -> None:
     print(long_str)
 
 
+def _generate_filename(uuid: str, dirpath: str) -> str:
+    """Generate a unique filename to save the full text of a reference.
+
+    Args:
+        uuid: UUID of the reference.
+        dirpath: Directory path where to save the full text references.
+
+    Returns:
+        A unique filename.
+    """
+    uuid = re.sub("http://zotero.org/users/local/", "", uuid)
+    uuid = re.sub("/items/", "_", uuid)
+    filename = os.path.join(dirpath, f"{uuid}.txt")
+
+    return filename
+
+
+def search(corpus: Corpus, api_keys_path: str, dirpath: str) -> None:
+    """Query provider API to retrieve full text of reference.
+
+    Args:
+        corpus: Corpus of references.
+        api_keys_path: Path to the file containings API keys.
+        dirpath: Path to the directory where the full text will be saved.
+    """
+    keys = query.api_keys(api_keys_path)
+
+    for k, v in tqdm(corpus.items()):
+        publisher = str.lower(v.get("publisher"))
+
+        # Generate filename
+        path = _generate_filename(k, dirpath)
+        # Ignore existing files
+        if os.path.exists(path):
+            continue
+
+        # Ignore references without DOI
+        if not v.get("doi", ""):
+            continue
+
+        try:
+            if "elsevier" in publisher:
+                answer = query.elsevier_get(v.get("doi"), keys.get("elsevier"))
+                api_name = "elsevier"
+                abs_function = api.get_elsevier_abstract
+            elif "springer" in publisher:
+                answer = query.springer_get(v.get("doi"), keys.get("springer"))
+                api_name = "springer"
+                abs_function = api.get_springer_abstract
+            elif "ieee" in publisher:
+                meta = query.ieee_get_meta(v.get("doi"), keys.get("ieee"))
+                api_name = "ieee"
+                abs_function = api.get_ieee_abstract
+                try:
+                    answer = query.ieee_get_oa(meta, keys.get("ieee"))
+                except Exception:
+                    answer = meta
+            else:
+                continue
+        except ValueError as e:
+            print(e)
+            raise ValueError(f"Error occured in the following reference:\n{k}")
+
+        # Max 10 queries per second for IEEE API
+        time.sleep(0.2)
+
+        try:
+            try:
+                api.process(answer, path, api_name)
+                v["full_text"] = path
+            except NameError:
+                if not v.get("abstract", ""):
+                    v["abstract"] = abs_function(answer)
+        except ValueError as e:
+            print(e)
+            raise ValueError(f"Error occured in the following reference:\n{k}")
+        except ET.ParseError as e:
+            print(e)
+            raise ValueError(f"Error occured in the following reference:\n{k}")
+        except TypeError as e:
+            print(e)
+            raise ValueError(f"Error occured in the following reference:\n{k}")
+
+
 if __name__ == "__main__":
     # Test the number of arguments
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 4:
         print("This script needs only one argument!\n"
-              + "Usage: ./corpus.py input_path")
+              + "Usage: ./corpus.py input_path output_path api_key_path")
         sys.exit(1)
 
     corpus = extract(sys.argv[1])
+    summary(corpus)
+
+    search(corpus, sys.argv[3], sys.argv[2])
+    summary(corpus)
+
+    json_obj = json.dumps(corpus)
+    with open(os.path.join(sys.argv[2], "corpus.json"), "w") as f:
+        f.write(json_obj)

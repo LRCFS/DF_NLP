@@ -64,8 +64,8 @@ def springer_get(doi: str, api_key: str) -> str:
     return oa_resp
 
 
-def ieee_get(doi: str, api_key: str) -> dict:
-    """Query information through a DOI to IEEE.
+def ieee_get_meta(doi: str, api_key: str) -> str:
+    """Query metadata through a DOI to IEEE.
 
     Args:
         doi: Requested DOI.
@@ -74,8 +74,28 @@ def ieee_get(doi: str, api_key: str) -> dict:
     Returns:
         IEEE's API answer as a string.
     """
-    # TODO: Test the API once the API key will be available
-    pass
+    query = ("http://ieeexploreapi.ieee.org/api/v1/search/articles?"
+             + f"apikey={api_key}&doi={doi}&format=xml")
+
+    return _get(query).content.decode("UTF-8", "ignore")
+
+
+def ieee_get_oa(meta: str, api_key: str) -> str:
+    """Query open access view to IEEE using the metadata answer.
+
+    Args:
+        meta: Metada answer.
+        api_key: Key authorizing access to IEEE's API.
+
+    Returns:
+        IEEE's API answer as a string.
+    """
+    root = ET.fromstring(meta)
+    art_number = root.find("./article/article_number").text
+
+    query = ("http://ieeexploreapi.ieee.org/api/v1/search/document/"
+             + f"{art_number}/fulltext?apikey={api_key}&format=xml")
+    return _get(query).content.decode("UTF-8", "ignore")
 
 
 def api_keys(api_keys_path: str) -> dict:
@@ -107,12 +127,11 @@ def api_keys(api_keys_path: str) -> dict:
         sys.exit(1)
 
     # IEEE API key
-    # TODO: Test the API once the API key will be available
-    # try:
-    #     ieee_get("10.1109/76.564123", keys["ieee"])
-    #     print("IEEE API key status: OK")
-    # except Exception:
-    #     print("An issue occured while checking IEEE API")
-    #     sys.exit(1)
+    try:
+        ieee_get_meta("10.1109/ACCESS.2020.2979348", keys["ieee"])
+        print("IEEE API key status: OK")
+    except Exception:
+        print("An issue occured while checking IEEE API")
+        sys.exit(1)
 
     return keys
