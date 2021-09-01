@@ -2,9 +2,13 @@
 """Benchmark several ATE method for the SemEval 2017 corpus."""
 
 import os
-import pandas as pd
+from math import pow
 from typing import Dict, List, Tuple
-from pyate import basic, combo_basic, cvalues, weirdness
+
+import numpy as np
+import pandas as pd
+from pyate import TermExtraction, basic, combo_basic, cvalues, weirdness
+from tqdm import tqdm
 
 
 def read_files(directory: str) -> Tuple[Dict]:
@@ -42,9 +46,35 @@ def read_files(directory: str) -> Tuple[Dict]:
                              names=["Type", "Info", "Term"],
                              sep="\t", dtype=str)
             # Remove rows which are not identified terms
-            df = df.loc[~df.loc[:, "Type"].str.startswith("R"), ]
+            df = df.loc[df.loc[:, "Type"].str.startswith("T"), ]
+            df.loc[:, "Term"] = df.loc[:, "Term"].str.lower()
+            df = df.drop_duplicates("Term")
             ann[uuid] = df
         else:
             raise SyntaxError(f"Unhandled extension: {f_name}")
 
     return (text, ann)
+
+
+def PRF_score(candidates: List[str], annotation: List[str]) -> Tuple[float]:
+    """Method which compute the precision, recall and F-measure.
+
+    Args:
+        candidates: Candidate terms identified by an ATE method.
+        annotation: Correct terms annotated by authors.
+
+    Returns:
+        A tuple containing the precision, the recall and F-measure.
+    """
+    beta = 2
+    match = 0
+    for c in candidates:
+        if c in annotation:
+            match += 1
+
+    precision = match / len(candidates)
+    recall = match / len(annotation)
+    f_measure = (1 + pow(beta, 2)) * (precision * recall /
+                                      (pow(beta, 2) * precision + recall))
+
+    return (precision, recall, f_measure)
