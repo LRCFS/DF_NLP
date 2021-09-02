@@ -71,12 +71,9 @@ def prf_score(candidate: List[str], annotation: List[str]) -> Dict[str, float]:
     Returns:
         A dictionnary containing the precision, the recall and F-measure.
     """
-    print("Scoring...")
+    print("PRF scoring...")
     beta = 2
-    match = 0
-    for c in candidate:
-        if c in annotation:
-            match += 1
+    match = sum(c in candidate for c in annotation)
 
     p = match / len(candidate)
     r = match / len(annotation)
@@ -94,8 +91,8 @@ def benchmarck(text: List[str], annotation: List[str]) -> pd.DataFrame:
     """Benchmark of Basic, Combo Basic, C-Value and Weirdness ATE methods
 
     Args:
-        text: The corpus used to compare the methods
-        annotation: The terms identified by authors in `text`
+        text: The corpus used to compare the methods.
+        annotation: The terms identified by authors in `text`.
 
     Returns:
         DataFrame containing precision, recall and F-measure for each
@@ -109,22 +106,25 @@ def benchmarck(text: List[str], annotation: List[str]) -> pd.DataFrame:
 
     # Basic
     print("### Basic : Starting ###")
-    res = basic(text, have_single_word=True, verbose=True)
+    res = basic(text, have_single_word=True,
+                verbose=True).sort_values(ascending=False)
     res = res[res > 0].index.str.lower().to_list()
     score.loc["Basic", ] = prf_score(res, annotation)
     print("### Basic : Done ###\n\n### Combo Basic : Starting ###")
     # Combo Basic
-    res = combo_basic(text, have_single_word=True, verbose=True)
+    res = combo_basic(text, have_single_word=True,
+                      verbose=True).sort_values(ascending=False)
     res = res[res > 0].index.str.lower().to_list()
     score.loc["Combo_Basic", ] = prf_score(res, annotation)
     print("### Combo Basic : Done ###\n\n### C-Value : Starting ###")
     # C-Value
-    res = cvalues(text, have_single_word=True, verbose=True)
+    res = cvalues(text, have_single_word=True,
+                  verbose=True).sort_values(ascending=False)
     res = res[res > 0].index.str.lower().to_list()
     score.loc["C-Value", ] = prf_score(res, annotation)
     print("### C-Value : Done ###\n\n### Weirdness : Starting ###")
     # Weirdness
-    res = weirdness(text, general, verbose=True)
+    res = weirdness(text, general, verbose=True).sort_values(ascending=False)
     res = res[res > 0].index.str.lower().to_list()
     score.loc["Weirdness", ] = prf_score(res, annotation)
     print("### Weirdness ###")
