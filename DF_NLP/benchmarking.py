@@ -4,8 +4,7 @@
 import os
 from math import pow
 from typing import Dict, List, Tuple
-import re
-import numpy as np
+
 import pandas as pd
 from pyate import TermExtraction, basic, combo_basic, cvalues, weirdness
 from tqdm import tqdm
@@ -61,8 +60,10 @@ def read_files(directory: str) -> Tuple[List[str]]:
     return (text, annotation)
 
 
-def prf_score(candidate: List[str], annotation: List[str]) -> Dict[str, float]:
-    """Method which compute the precision, recall and F-measure.
+def _prf_score(candidate: List[str],
+               annotation: List[str]) -> Dict[str, float]:
+    """Method which compute the precision, recall and F-measure
+    features for the candidate terms.
 
     Args:
         candidate: Candidate terms identified by an ATE method.
@@ -87,46 +88,141 @@ def prf_score(candidate: List[str], annotation: List[str]) -> Dict[str, float]:
     return prf
 
 
-def benchmarck(text: List[str], annotation: List[str]) -> pd.DataFrame:
+def _pak_score(candidate: List[str], annotation: List[str],
+               k_rank: List[int]) -> Dict[str, float]:
+    """Method which compute the Precision@K feature for the candidate terms.
+
+    Args:
+        candidate: Candidate terms identified by an ATE method.
+        annotation: Correct terms annotated by authors.
+        k_rank: List of K rank(s) to compute Precision@K.
+
+    Returns:
+        A dictionnary containing the Precision@K for one or more K rank(s).
+    """
+    print("Precision@K scoring...")
+
+    score = {}
+    for k in k_rank:
+        sub = candidate[0:k]
+        match = sum(c in sub for c in annotation)
+        score[f"Precision@{k}"] = match / len(sub)
+
+    print(score)
+    return score
+
+
+def _bpref_score(candidate: List[str],
+                 annotation: List[str]) -> Dict[str, float]:
+    """Method which compute the Bpref feature for the candidate terms.
+
+    Args:
+        candidate: Candidate terms identified by an ATE method.
+        annotation: Correct terms annotated by authors.
+
+    Returns:
+        A dictionnary containing the bpref.
+    """
+    print("Bpref scoring...")
+
+    total = 0
+    ann_index = [candidate.index(ann) if ann in candidate else 0
+                 for ann in annotation]
+
+    total = sum(
+        len(list(set(candidate[0:i]) - set(annotation))) / len(candidate)
+        for i in tqdm(ann_index)
+    )
+    score = {"Bpref": (1/len(annotation)) * total}
+
+    print(score)
+    return score
+
+
+def _scoring(method: str, candidate: List[str], annotation: List[str],
+             k_rank: List[int]) -> Dict[str, float]:
+    """Method which compute the Precision@K feature for the candidate terms.
+
+    Args:
+        method: The scoring method: 'PRF' for Precision, Recall
+            and F-measure; 'P@K' for Precision@K and 'Bpref' for Bpref.
+        candidate: Candidate terms identified by an ATE method.
+        annotation: Correct terms annotated by authors.
+        k_rank: List of K rank(s) to compute Precision@K.
+
+    Returns:
+        A dictionnary containing the score feature(s) results.
+    """
+    if method == "PRF":
+        return _prf_score(candidate, annotation)
+    elif method == "P@K":
+        return _pak_score(candidate, annotation, k_rank)
+    else:
+        return _bpref_score(candidate, annotation)
+
+
+def benchmarck(text: List[str], annotation: List[str],
+               method: str = "PRF",
+               k_rank: List[int] = [500, 1000, 5000]) -> pd.DataFrame:
     """Benchmark of Basic, Combo Basic, C-Value and Weirdness ATE methods
 
     Args:
         text: The corpus used to compare the methods.
         annotation: The terms identified by authors in `text`.
+        method: The scoring method: 'PRF' for Precision, Recall
+            and F-measure; 'P@K' for Precision@K and 'Bpref' for Bpref.
+        k_rank: List of K rank(s) to compute Precision@K.
 
     Returns:
         DataFrame containing precision, recall and F-measure for each
         method.
+
+    Raises:
+        ValueError: If at least one `k_rank` is invalid.
+        ValueError: If the scoring `method` is unknown.
     """
     general = TermExtraction.get_general_domain()
-    score = pd.DataFrame(
-        columns=["Precision", "Recall", "F_Measure"],
-        index=["Basic", "Combo_Basic", "C-Value", "Weirdness"]
-    )
+
+    # Check validity of k rank(s)
+    if (any(k <= 0 for k in k_rank)
+            or any(not isinstance(k, int) for k in k_rank)):
+        raise ValueError("K rank(s) contains a value <= 0 or a non int value!")
+
+    if method == "PRF":
+        col = ["Precision", "Recall", "F_Measure"]
+    elif method == "P@K":
+        col = [f"Precision@{k}" for k in k_rank]
+    elif method == "Bpref":
+        col = ["Bpref"]
+    else:
+        raise ValueError(f"Unknown scoring method: {method}")
+
+    score = pd.DataFrame(columns=col, index=[
+                         "Basic", "Combo_Basic", "C-Value", "Weirdness"])
 
     # Basic
     print("### Basic : Starting ###")
     res = basic(text, have_single_word=True,
                 verbose=True).sort_values(ascending=False)
     res = res[res > 0].index.str.lower().to_list()
-    score.loc["Basic", ] = prf_score(res, annotation)
+    score.loc["Basic", ] = _scoring(method, res, annotation, k_rank)
     print("### Basic : Done ###\n\n### Combo Basic : Starting ###")
     # Combo Basic
     res = combo_basic(text, have_single_word=True,
                       verbose=True).sort_values(ascending=False)
     res = res[res > 0].index.str.lower().to_list()
-    score.loc["Combo_Basic", ] = prf_score(res, annotation)
+    score.loc["Combo_Basic", ] = _scoring(method, res, annotation, k_rank)
     print("### Combo Basic : Done ###\n\n### C-Value : Starting ###")
     # C-Value
     res = cvalues(text, have_single_word=True,
                   verbose=True).sort_values(ascending=False)
     res = res[res > 0].index.str.lower().to_list()
-    score.loc["C-Value", ] = prf_score(res, annotation)
+    score.loc["C-Value", ] = _scoring(method, res, annotation, k_rank)
     print("### C-Value : Done ###\n\n### Weirdness : Starting ###")
     # Weirdness
     res = weirdness(text, general, verbose=True).sort_values(ascending=False)
     res = res[res > 0].index.str.lower().to_list()
-    score.loc["Weirdness", ] = prf_score(res, annotation)
+    score.loc["Weirdness", ] = _scoring(method, res, annotation, k_rank)
     print("### Weirdness ###")
 
     return score
