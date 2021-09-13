@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Benchmark several ATE method for the SemEval 2017 corpus."""
 
+import argparse
 import os
+import sys
 from math import pow
 from typing import Dict, List, Tuple
 
@@ -226,3 +228,20 @@ def benchmarck(text: List[str], annotation: List[str],
     print("### Weirdness ###")
 
     return score
+
+
+if __name__ == "__main__":
+    cli = argparse.ArgumentParser()
+    cli.add_argument("input", type=str, help="Path to the input directory")
+    cli.add_argument("output", type=str, help="Path to the output directory")
+    cli.add_argument("--scoring", nargs="*", type=str, default=["PRF"],
+                     help="The scoring methods to use ('PRF', 'P@K', 'Bpref')")
+    cli.add_argument("--ranks", nargs="*", type=int, default=[500, 1000, 5000],
+                     help="The ranks to compute for P@K")
+
+    args = cli.parse_args()
+
+    text, ann = read_files(args.input)
+    for s in args.scoring:
+        score = benchmarck(text, ann, method=s, k_rank=args.ranks)
+        score.to_csv(args.output, sep=";")
