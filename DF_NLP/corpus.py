@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Module setting up the corpus using a CLS JSON bibliography."""
 
+import argparse
 import json
 import os
 import re
 import sys
 import time
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from tqdm import tqdm
 
@@ -185,18 +186,54 @@ def _generate_filename(uuid: str, dirpath: str) -> str:
     return filename
 
 
-def search(corpus: Corpus, api_keys_path: str, dirpath: str) -> None:
+def _unknown_publisher(doi: str,
+                       keys: Dict[str, str]) -> Tuple[str, str, Callable]:
+    """Method identifying the correct publisher if it is unknown.
+
+    Args:
+        doi: Requested DOI.
+        keys: Dictionnary of API keys.
+
+    Returns:
+        Tuple containing the API answer, API name and the abstract function.
+    """
+    answer = str()
+
+    try:
+        answer = query.elsevier_get(doi, keys.get("elsevier"))
+    except Exception:
+        pass
+
+    if not answer:
+        answer = query.springer_get(doi, keys.get("springer"))
+        root = ET.fromstring(answer)
+        if (root.find(".//body") is not None
+                or root.find(".//abstract") is not None):
+            return (answer, "springer", api.get_springer_abstract)
+    else:
+        return (answer, "elsevier", api.get_elsevier_abstract)
+
+    return (None, None, None)
+
+
+def search(corpus: Corpus, api_keys_path: str, dirpath: str,
+           threshold: int = 0) -> None:
     """Query provider API to retrieve full text of reference.
 
     Args:
         corpus: Corpus of references.
         api_keys_path: Path to the file containings API keys.
         dirpath: Path to the directory where the full text will be saved.
+        threshold: Number of occurence from which IEEE requests are sent
+            (due to the 200 requests per day limit).
     """
     keys = query.api_keys(api_keys_path)
+    counter = 0
 
     for k, v in tqdm(corpus.items()):
         publisher = str.lower(v.get("publisher"))
+        source = str.lower(v.get("source"))
+        publisher = f"{publisher} {source}"
 
         # Generate filename
         path = _generate_filename(k, dirpath)
@@ -217,7 +254,8 @@ def search(corpus: Corpus, api_keys_path: str, dirpath: str) -> None:
                 answer = query.springer_get(v.get("doi"), keys.get("springer"))
                 api_name = "springer"
                 abs_function = api.get_springer_abstract
-            elif "ieee" in publisher:
+            elif "ieee" in publisher and counter >= threshold:
+                counter += 1
                 meta = query.ieee_get_meta(v.get("doi"), keys.get("ieee"))
                 api_name = "ieee"
                 abs_function = api.get_ieee_abstract
@@ -226,11 +264,19 @@ def search(corpus: Corpus, api_keys_path: str, dirpath: str) -> None:
                 except Exception:
                     answer = meta
             else:
-                continue
-        except ValueError as e:
-            print(e)
-            raise ValueError(f"Error occured in the following reference:\n{k}")
+                answer, api_name, abs_function = _unknown_publisher(
+                    v.get("doi"), keys)
+        except ValueError:
+            raise ValueError(f"[Threshold: {counter}] Error occured in the \
+following reference:\n{k}")
 
+        if not answer:
+            continue
+
+        # If an IEEE reference is being analyzed and the threshold is
+        # not reached, the end of the funtion is ignored
+        if api_name == "ieee" and counter < threshold:
+            continue
         # Max 10 queries per second for IEEE API
         time.sleep(0.2)
 
@@ -241,30 +287,28 @@ def search(corpus: Corpus, api_keys_path: str, dirpath: str) -> None:
             except NameError:
                 if not v.get("abstract", ""):
                     v["abstract"] = abs_function(answer)
-        except ValueError as e:
-            print(e)
-            raise ValueError(f"Error occured in the following reference:\n{k}")
-        except ET.ParseError as e:
-            print(e)
-            raise ValueError(f"Error occured in the following reference:\n{k}")
-        except TypeError as e:
-            print(e)
-            raise ValueError(f"Error occured in the following reference:\n{k}")
+        except Exception:
+            raise ValueError(f"[Threshold: {counter}] Error occured in the \
+following reference:\n{k}")
 
 
 if __name__ == "__main__":
-    # Test the number of arguments
-    if len(sys.argv) != 4:
-        print("This script needs only one argument!\n"
-              + "Usage: ./corpus.py input_path output_path api_key_path")
-        sys.exit(1)
+    cli = argparse.ArgumentParser()
+    cli.add_argument("input", type=str, help="Path to the input file")
+    cli.add_argument("output", type=str, help="Path to the output directory")
+    cli.add_argument("api_keys", type=str, help="Path to the APIs keys file")
+    cli.add_argument("--threshold", type=int, default=0,
+                     help="Threshold from which IEEE requests are sent")
 
-    corpus = extract(sys.argv[1])
+    args = cli.parse_args()
+
+    corpus = extract(args.input)
     summary(corpus)
 
-    search(corpus, sys.argv[3], sys.argv[2])
-    summary(corpus)
-
-    json_obj = json.dumps(corpus)
-    with open(os.path.join(sys.argv[2], "corpus.json"), "w") as f:
-        f.write(json_obj)
+    try:
+        search(corpus, args.api_keys, args.output, args.threshold)
+        summary(corpus)
+    finally:
+        json_obj = json.dumps(corpus)
+        with open(os.path.join(args.output, "corpus.json"), "w") as f:
+            f.write(json_obj)
