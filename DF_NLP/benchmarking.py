@@ -235,7 +235,8 @@ if __name__ == "__main__":
     cli.add_argument("input", type=str, help="Path to the input directory")
     cli.add_argument("output", type=str, help="Path to the output directory")
     cli.add_argument("--scoring", nargs="*", type=str, default=["PRF"],
-                     help="The scoring methods to use ('PRF', 'P@K', 'Bpref')")
+                     choices=["PRF", "P@K", "Bpref"],
+                     help="The scoring methods to use")
     cli.add_argument("--ranks", nargs="*", type=int, default=[500, 1000, 5000],
                      help="The ranks to compute for P@K")
 
