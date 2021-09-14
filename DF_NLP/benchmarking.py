@@ -64,8 +64,7 @@ def read_files(directory: str) -> Tuple[List[str]]:
 
 def _prf_score(candidate: List[str],
                annotation: List[str]) -> Dict[str, float]:
-    """Method which compute the precision, recall and F-measure
-    features for the candidate terms.
+    """Compute the precision, recall and F-measure for the candidate terms.
 
     Args:
         candidate: Candidate terms identified by an ATE method.
@@ -92,7 +91,7 @@ def _prf_score(candidate: List[str],
 
 def _pak_score(candidate: List[str], annotation: List[str],
                k_rank: List[int]) -> Dict[str, float]:
-    """Method which compute the Precision@K feature for the candidate terms.
+    """Compute the Precision@K feature for the candidate terms.
 
     Args:
         candidate: Candidate terms identified by an ATE method.
@@ -116,7 +115,7 @@ def _pak_score(candidate: List[str], annotation: List[str],
 
 def _bpref_score(candidate: List[str],
                  annotation: List[str]) -> Dict[str, float]:
-    """Method which compute the Bpref feature for the candidate terms.
+    """Compute the Bpref feature for the candidate terms.
 
     Args:
         candidate: Candidate terms identified by an ATE method.
@@ -143,7 +142,7 @@ def _bpref_score(candidate: List[str],
 
 def _scoring(method: str, candidate: List[str], annotation: List[str],
              k_rank: List[int]) -> Dict[str, float]:
-    """Method which compute the Precision@K feature for the candidate terms.
+    """Compute the Precision@K feature for the candidate terms.
 
     Args:
         method: The scoring method: 'PRF' for Precision, Recall
@@ -166,7 +165,7 @@ def _scoring(method: str, candidate: List[str], annotation: List[str],
 def benchmarck(text: List[str], annotation: List[str],
                method: str = "PRF",
                k_rank: List[int] = [500, 1000, 5000]) -> pd.DataFrame:
-    """Benchmark of Basic, Combo Basic, C-Value and Weirdness ATE methods
+    """Benchmark Basic, Combo Basic, C-Value and Weirdness ATE methods.
 
     Args:
         text: The corpus used to compare the methods.

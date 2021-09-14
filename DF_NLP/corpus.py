@@ -188,7 +188,7 @@ def _generate_filename(uuid: str, dirpath: str) -> str:
 
 def _unknown_publisher(doi: str,
                        keys: Dict[str, str]) -> Tuple[str, str, Callable]:
-    """Method identifying the correct publisher if it is unknown.
+    """Identify the correct publisher if it is unknown.
 
     Args:
         doi: Requested DOI.
@@ -226,6 +226,10 @@ def search(corpus: Corpus, api_keys_path: str, dirpath: str,
         dirpath: Path to the directory where the full text will be saved.
         threshold: Number of occurence from which IEEE requests are sent
             (due to the 200 requests per day limit).
+
+    Raises:
+        ValueError: Raise a ValueError during the query or process and
+            provide the new value for the threshold.
     """
     keys = query.api_keys(api_keys_path)
     counter = 0
@@ -267,8 +271,8 @@ def search(corpus: Corpus, api_keys_path: str, dirpath: str,
                 answer, api_name, abs_function = _unknown_publisher(
                     v.get("doi"), keys)
         except ValueError:
-            raise ValueError(f"[Threshold: {counter}] Error occured in the \
-following reference:\n{k}")
+            raise ValueError(f"[Threshold: {counter - 1}] Error occured in \
+the following reference:\n{k}")
 
         if not answer:
             continue
@@ -288,8 +292,8 @@ following reference:\n{k}")
                 if not v.get("abstract", ""):
                     v["abstract"] = abs_function(answer)
         except Exception:
-            raise ValueError(f"[Threshold: {counter}] Error occured in the \
-following reference:\n{k}")
+            raise ValueError(f"[Threshold: {counter - 1}] Error occured in \
+the following reference:\n{k}")
 
 
 if __name__ == "__main__":

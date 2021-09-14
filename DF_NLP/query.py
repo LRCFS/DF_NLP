@@ -3,7 +3,7 @@
 import json
 import sys
 import xml.etree.ElementTree as ET
-from typing import Union
+from typing import Dict, Union
 
 import requests
 
@@ -16,6 +16,9 @@ def _get(query: str) -> requests.Response:
 
     Returns:
         API response to the request.
+
+    Raises:
+        Exception: Non valid HTTP status code received from the query.
     """
     resp = requests.get(query)
     if resp.status_code != 200:
@@ -98,7 +101,7 @@ def ieee_get_oa(meta: str, api_key: str) -> str:
     return _get(query).content.decode("UTF-8", "ignore")
 
 
-def api_keys(api_keys_path: str) -> dict:
+def api_keys(api_keys_path: str) -> Dict[str, str]:
     """Check the presence and status of all API keys before retrieving it.
 
     Args:
