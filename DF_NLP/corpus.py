@@ -12,8 +12,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from tqdm import tqdm
 
-import api
-import query
+from DF_NLP import api, query
 
 Corpus = Dict[str, Dict[str, str]]
 
@@ -32,7 +31,7 @@ def _search_doi(ref: dict) -> str:
     if ref.get("DOI"):
         doi = ref.get("DOI")
     elif ref.get("note"):
-        pattern = re.compile(r"(?<=DOI: )[-\w./\(\)]+")
+        pattern = re.compile(r"(?<=DOI: )[-\w./()]+")
         res = pattern.search(ref.get("note"))
         if res:
             doi = res.group()
