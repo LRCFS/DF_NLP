@@ -251,4 +251,5 @@ if __name__ == "__main__":
     text, ann = read_files(args.input)
     for s in args.scoring:
         score = benchmarck(text, ann, method=s, k_rank=args.ranks)
-        score.to_csv(args.output, sep=";")
+        filename = os.path.join(args.output, f"score_{s}.csv")
+        score.to_csv(filename, sep=";")
