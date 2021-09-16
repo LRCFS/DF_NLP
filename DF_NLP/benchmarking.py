@@ -107,7 +107,10 @@ def _pak_score(candidate: List[str], annotation: List[str],
     for k in k_rank:
         sub = candidate[0:k]
         match = sum(c in sub for c in annotation)
-        score[f"Precision@{k}"] = match / len(sub)
+        try:
+            score[f"Precision@{k}"] = match / len(sub)
+        except ZeroDivisionError:
+            score[f"Precision@{k}"] = 0.0
 
     print(score)
     return score
@@ -127,14 +130,18 @@ def _bpref_score(candidate: List[str],
     print("Bpref scoring...")
 
     total = 0
-    ann_index = [candidate.index(ann) if ann in candidate else 0
-                 for ann in annotation]
+    match = sum(c in candidate for c in annotation)
+    ann_index = [candidate.index(ann) for ann in annotation
+                 if ann in candidate]
 
     total = sum(
-        len(list(set(candidate[0:i]) - set(annotation))) / len(candidate)
+        1 - len(list(set(candidate[0:i]) - set(annotation))) / len(candidate)
         for i in tqdm(ann_index)
     )
-    score = {"Bpref": (1/len(annotation)) * total}
+    try:
+        score = {"Bpref": (1/match) * total}
+    except ZeroDivisionError:
+        score = {"Bpref": 0.0}
 
     print(score)
     return score

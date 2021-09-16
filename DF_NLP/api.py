@@ -49,6 +49,7 @@ def _process_xml(answer: str) -> str:
     answer = re.sub(r'<ce:anchor[ \w="]*/>', "", answer)
     answer = re.sub(r'</?boxed-text[ \w="]*>', "", answer)
     answer = re.sub("<(def|term)-head>.+?</(def|term)-head>", "", answer)
+    answer = re.sub(r'<index-term[ \w="]*>.+?</index-term>', "", answer)
     answer = re.sub("\xa0", " ", answer)
     # Handle references
     answer = re.sub(r'</?ce:cross-refs?[- \w=".]*>', "", answer)
@@ -138,7 +139,8 @@ def _process_def_list(dlist: ET.Element, text: str) -> str:
             text += f"{child.text}"
         # Springer
         elif child.tag == "def-item":
-            text += f"- {child.find('./term')}: {child.find('./def/p')}"
+            text += (f"- {child.find('./term').text}: " +
+                     f"{child.find('./def/p').text}")
         else:
             raise ValueError(f"Unknown def-list tag: {child.tag}")
     return text
@@ -166,9 +168,11 @@ def _process_paragraph(para: ET.Element, text: str) -> str:
         # Elsevier
         if child.tag == f"{ns}list":
             items = child.findall(f".//{ns}para")
+            text += "\n".join([f"- {i.text}" for i in items])
         # Springer and IEEE
         elif child.tag == "list":
             items = child.findall(".//p")
+            text += "\n".join([f"- {i.text}" for i in items])
         elif child.tag == f"{ns}def-list" or child.tag == "def-list":
             text = _process_def_list(child, text)
         elif child.tag == f"{ns}section-title" or child.tag == "title":
@@ -177,7 +181,6 @@ def _process_paragraph(para: ET.Element, text: str) -> str:
             text = _process_paragraph(child, text)
         else:
             raise ValueError(f"Unknown paragraph tag: {child.tag}")
-        text += "\n".join([f"- {i.text}" for i in items])
         text += "\n"
 
     text = re.sub("( *\n *)+", " ", text)
@@ -240,7 +243,7 @@ def process(answer: str, path: str, api: Api) -> None:
     text = str()
 
     if (not root) \
-            or (api == "springer" and root.find("book-part")):
+            or (api == "springer" and root.find("book-part") is not None):
         raise NameError("Full text unavailable!")
 
     for child in list(root):
@@ -294,9 +297,9 @@ def get_springer_abstract(answer: str) -> str:
             if child.tag == "title":
                 continue
             elif child.tag == "sec":
-                text += _process_section(child, text)
+                text = _process_section(child, text)
             elif child.tag == "p":
-                text += _process_paragraph(child, text)
+                text = _process_paragraph(child, text)
             else:
                 raise ValueError(f"Unknown root tag: {child.tag}")
 
@@ -316,4 +319,4 @@ def get_ieee_abstract(answer: str) -> str:
     root = ET.fromstring(answer)
     desc = root.find("./article/abstract")
 
-    return desc.text if desc else ""
+    return desc.text if desc is not None else ""
