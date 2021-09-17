@@ -248,13 +248,14 @@ def process(answer: str, path: str, api: Api) -> None:
 
     for child in list(root):
         if child.tag == f"{ns}section" or child.tag == "sec":
-            with open(path, "a+") as f:
-                f.write(f"{_process_section(child, text)}\n")
+            text = f"{_process_section(child, text)}\n"
         elif child.tag == f"{ns}para" or child.tag == "p":
-            with open(path, "a+") as f:
-                f.write(f"{_process_paragraph(child, text)}\n")
+            text = f"{_process_paragraph(child, text)}\n"
         else:
             raise ValueError(f"Unknown root tag: {child.tag}")
+
+    with open(path, "w") as f:
+        f.write(text)
 
 
 def get_elsevier_abstract(answer: str) -> str:
