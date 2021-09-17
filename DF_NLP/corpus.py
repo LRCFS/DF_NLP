@@ -233,7 +233,10 @@ def search(corpus: Corpus, api_keys_path: str, dirpath: str,
     keys = query.api_keys(api_keys_path)
     counter = 0
 
-    for k, v in tqdm(corpus.items()):
+    corpus_keys = sorted(list(corpus.keys()))
+
+    for k in tqdm(corpus_keys):
+        v = corpus.get(k)
         publisher = str.lower(v.get("publisher"))
         source = str.lower(v.get("source"))
         publisher = f"{publisher} {source}"
