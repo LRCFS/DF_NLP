@@ -50,7 +50,7 @@ source ~/.venv/myenv/bin/activate
 
 Download the last version of DF_NLP and install it:
 ```bash
-git clone git@github.com:legallm/DF_NLP.git
+git clone git@github.com:LRCFS/DF_NLP.git
 python3 -m pip install -e ./DF_NLP
 ```
 
@@ -65,7 +65,7 @@ make tests
 <!-- USAGE -->
 ## Usage
 ### Corpus creation
-The corpus creation is handled by [corpus.py](https://github.com/legallm/DF_NLP/blob/main/DF_NLP/corpus.py). To create the corpus you will need the CLS JSON bibliography and the authentication keys to access Elsevier, Springer and IEEE APIs. The IEEE API has a limited use (200 query per day) and therefore you may need to provide a threshold value to ignore the first IEEE references handled in a previous run of the script. The new threshold value to use is provided at each exception raising.
+The corpus creation is handled by [corpus.py](https://github.com/LRCFS/DF_NLP/blob/main/DF_NLP/corpus.py). To create the corpus you will need the CLS JSON bibliography and the authentication keys to access Elsevier, Springer and IEEE APIs. The IEEE API has a limited use (200 query per day) and therefore you may need to provide a threshold value to ignore the first IEEE references handled in a previous run of the script. The new threshold value to use is provided at each exception raising.
 
 
 To run the creation of the corpus use the following command:
@@ -144,7 +144,7 @@ The data directory contains several input and output related to this project:
 
 <!-- MISC. -->
 ## Roadmap
-See the [open issues](https://github.com/legallm/DF_NLP/issues) for a list of
+See the [open issues](https://github.com/LRCFS/DF_NLP/issues) for a list of
 proposed features (and known issues).
 
 ## Contributing
@@ -157,7 +157,7 @@ Contributions are what make the open source community such an amazing place to b
 5. Open a Pull Request
 
 ## Versions
-For the versions available, see the [tags](https://github.com/legallm/DF_NLP/tags) on this repository.
+For the versions available, see the [tags](https://github.com/LRCFS/DF_NLP/tags) on this repository.
 
 ## Author(s)
 - **Maël LE GALL** ([legallm](https://github.com/legallm)) - *Initial work* - mael.le_gall@tutanota.com
