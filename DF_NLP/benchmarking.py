@@ -12,7 +12,7 @@ import pandas as pd
 from matplotlib import pyplot
 from pyate import TermExtraction, basic, combo_basic, cvalues, weirdness
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import precision_recall_curve, auc
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
@@ -215,13 +215,14 @@ def pr_curve(candidates: pd.Series, annotation: List[str],
     # Locate the index of the largest F-Measure
     ix = np.argmax(fmeasure)
     best = round(thresholds[ix], 3)
-    print(f"Best threshold={best}")
+    auc_val = round(auc(r, p), 2)
+    print(f"Best threshold={best}  AUC={auc_val}")
     # Plot the precision-recall curves
     no_skill = len([y for y in ytest if y == 1]) / len(ytest)
     pyplot.plot([0, 1], [no_skill, no_skill], linestyle="--", color="red",
                 label="No Skill", zorder=0)
-    pyplot.plot(r, p, marker=".", color="royalblue", label="Logistic",
-                zorder=-1)
+    pyplot.plot(r, p, marker=".", color="royalblue",
+                label=f"Logistic (AUC={auc_val})", zorder=-1)
     pyplot.scatter(r[ix], p[ix], marker="o", color="black", label="Best",
                    zorder=1)
     pyplot.annotate(f"Best Threshold = {best}", xy=(r[ix], p[ix]),
