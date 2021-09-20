@@ -7,8 +7,13 @@ import sys
 from math import pow
 from typing import Dict, List, Tuple
 
+import numpy as np
 import pandas as pd
+from matplotlib import pyplot
 from pyate import TermExtraction, basic, combo_basic, cvalues, weirdness
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_curve
+from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
 
@@ -62,19 +67,20 @@ def read_files(directory: str) -> Tuple[List[str]]:
     return (text, annotation)
 
 
-def _prf_score(candidate: List[str],
-               annotation: List[str]) -> Dict[str, float]:
+def _prf_score(candidate: List[str], annotation: List[str],
+               beta: int = 1) -> Dict[str, float]:
     """Compute the precision, recall and F-measure for the candidate terms.
 
     Args:
         candidate: Candidate terms identified by an ATE method.
         annotation: Correct terms annotated by authors.
+        beta: Parameter of F-Measure and allowing to give more
+            importance to precision (<1) or to recall (>1).
 
     Returns:
         A dictionnary containing the precision, the recall and F-measure.
     """
     print("PRF scoring...")
-    beta = 2
     match = sum(c in candidate for c in annotation)
 
     p = match / len(candidate)
@@ -90,7 +96,7 @@ def _prf_score(candidate: List[str],
 
 
 def _pak_score(candidate: List[str], annotation: List[str],
-               k_rank: List[int]) -> Dict[str, float]:
+               k_rank: List[int] = [500, 1000, 5000]) -> Dict[str, float]:
     """Compute the Precision@K feature for the candidate terms.
 
     Args:
@@ -148,7 +154,8 @@ def _bpref_score(candidate: List[str],
 
 
 def _scoring(method: str, candidate: List[str], annotation: List[str],
-             k_rank: List[int]) -> Dict[str, float]:
+             beta: int = 1,
+             k_rank: List[int] = [500, 1000, 5000]) -> Dict[str, float]:
     """Compute the Precision@K feature for the candidate terms.
 
     Args:
@@ -156,29 +163,95 @@ def _scoring(method: str, candidate: List[str], annotation: List[str],
             and F-measure; 'P@K' for Precision@K and 'Bpref' for Bpref.
         candidate: Candidate terms identified by an ATE method.
         annotation: Correct terms annotated by authors.
+        beta: = Parameter of F-Measure and allowing to give more
+            importance to precision (<1) or to recall (>1).
         k_rank: List of K rank(s) to compute Precision@K.
 
     Returns:
         A dictionnary containing the score feature(s) results.
     """
     if method == "PRF":
-        return _prf_score(candidate, annotation)
+        return _prf_score(candidate, annotation, beta)
     elif method == "P@K":
         return _pak_score(candidate, annotation, k_rank)
     else:
         return _bpref_score(candidate, annotation)
 
 
-def benchmarck(text: List[str], annotation: List[str],
-               method: str = "PRF",
+def pr_curve(candidates: pd.Series, annotation: List[str],
+             ate: str, path: str, beta: int = 1) -> float:
+    """Write a Precision-Recall curve plot and return the best threshold.
+
+    Args:
+        candidates: List of extracted terms from an ATE method to
+            benchmark.
+        annotation: The terms identified by the authors.
+        beta: Parameter of F-Measure and allowing to give more
+            importance to precision (<1) or to recall (>1).
+        ate: ATE method used
+        path: Directory where the plot should be saved.
+
+    Returns
+        The best threshold to use according to the chosen value of `beta`.
+    """
+    # Clear plot
+    pyplot.clf()
+
+    x = np.reshape(candidates.values, (len(candidates), 1))
+    y = [1 if c in annotation else 0 for c in candidates.index]
+
+    # Split into train/test sets
+    xtrain, xtest, ytrain, ytest = train_test_split(x, y, test_size=0.5,
+                                                    random_state=2)
+    # Fit a model
+    model = LogisticRegression(solver='lbfgs')
+    model.fit(xtrain, ytrain)
+    # Predict probabilities
+    proba = model.predict_proba(xtest)
+    proba = proba[:, 1]
+    # Computing PRF
+    p, r, thresholds = precision_recall_curve(ytest, proba)
+    fmeasure = (1 + pow(beta, 2)) * (p*r / (pow(beta, 2)*p + r))
+    # Locate the index of the largest F-Measure
+    ix = np.argmax(fmeasure)
+    best = round(thresholds[ix], 3)
+    print(f"Best threshold={best}")
+    # Plot the precision-recall curves
+    no_skill = len([y for y in ytest if y == 1]) / len(ytest)
+    pyplot.plot([0, 1], [no_skill, no_skill], linestyle="--", color="red",
+                label="No Skill", zorder=0)
+    pyplot.plot(r, p, marker=".", color="royalblue", label="Logistic",
+                zorder=-1)
+    pyplot.scatter(r[ix], p[ix], marker="o", color="black", label="Best",
+                   zorder=1)
+    pyplot.annotate(f"Best Threshold = {best}", xy=(r[ix], p[ix]),
+                    xytext=(5, 2), textcoords='offset points', ha='right',
+                    va='bottom')
+    # Axis labels
+    pyplot.xlabel("Recall")
+    pyplot.ylabel("Precision")
+    pyplot.title(f"Precision-Recall curve for {ate} (Beta = {beta})")
+    # Show the legend
+    pyplot.legend()
+    # Save the plot
+    pyplot.savefig(os.path.join(path, f"{ate}.png"))
+
+    return best
+
+
+def benchmarck(text: List[str], annotation: List[str], path: str,
+               method: str = "PRF", beta: int = 1,
                k_rank: List[int] = [500, 1000, 5000]) -> pd.DataFrame:
     """Benchmark Basic, Combo Basic, C-Value and Weirdness ATE methods.
 
     Args:
         text: The corpus used to compare the methods.
         annotation: The terms identified by authors in `text`.
+        path: Directory where the plots should be saved.
         method: The scoring method: 'PRF' for Precision, Recall
             and F-measure; 'P@K' for Precision@K and 'Bpref' for Bpref.
+        beta: Parameter of F-Measure (PRF) and allowing to give more
+            importance to precision (<1) or to recall (>1).
         k_rank: List of K rank(s) to compute Precision@K.
 
     Returns:
@@ -206,31 +279,36 @@ def benchmarck(text: List[str], annotation: List[str],
         raise ValueError(f"Unknown scoring method: {method}")
 
     score = pd.DataFrame(columns=col, index=[
-                         "Basic", "Combo_Basic", "C-Value", "Weirdness"])
+        "Basic", "Combo_Basic", "C-Value", "Weirdness"])
 
     # Basic
     print("### Basic : Starting ###")
     res = basic(text, have_single_word=True,
                 verbose=True).sort_values(ascending=False)
-    res = res[res > 0].index.str.lower().to_list()
-    score.loc["Basic", ] = _scoring(method, res, annotation, k_rank)
+    best = pr_curve(res, ann, "Basic", path, beta)
+    res = res[res >= best].index.str.lower().to_list()
+    score.loc["Basic", ] = _scoring(method, res, annotation, beta, k_rank)
     print("### Basic : Done ###\n\n### Combo Basic : Starting ###")
     # Combo Basic
     res = combo_basic(text, have_single_word=True,
                       verbose=True).sort_values(ascending=False)
-    res = res[res > 0].index.str.lower().to_list()
-    score.loc["Combo_Basic", ] = _scoring(method, res, annotation, k_rank)
+    best = pr_curve(res, ann, "Combo_Basic", path, beta)
+    res = res[res >= best].index.str.lower().to_list()
+    score.loc["Combo_Basic", ] = _scoring(method, res, annotation, beta,
+                                          k_rank)
     print("### Combo Basic : Done ###\n\n### C-Value : Starting ###")
     # C-Value
     res = cvalues(text, have_single_word=True,
                   verbose=True).sort_values(ascending=False)
-    res = res[res > 0].index.str.lower().to_list()
-    score.loc["C-Value", ] = _scoring(method, res, annotation, k_rank)
+    best = pr_curve(res, ann, "C-Value", path, beta)
+    res = res[res >= best].index.str.lower().to_list()
+    score.loc["C-Value", ] = _scoring(method, res, annotation, beta, k_rank)
     print("### C-Value : Done ###\n\n### Weirdness : Starting ###")
     # Weirdness
     res = weirdness(text, general, verbose=True).sort_values(ascending=False)
-    res = res[res > 0].index.str.lower().to_list()
-    score.loc["Weirdness", ] = _scoring(method, res, annotation, k_rank)
+    best = pr_curve(res, ann, "Weirdness", path, beta)
+    res = res[res >= best].index.str.lower().to_list()
+    score.loc["Weirdness", ] = _scoring(method, res, annotation, beta, k_rank)
     print("### Weirdness ###")
 
     return score
@@ -243,6 +321,9 @@ if __name__ == "__main__":
     cli.add_argument("--scoring", nargs="*", type=str, default=["PRF"],
                      choices=["PRF", "P@K", "Bpref"],
                      help="The scoring methods to use")
+    cli.add_argument("--beta", type=float, default=1, help="Parameter of \
+F-Measure and allowing to give more importance to precision (<1) or to \
+recall (>1).")
     cli.add_argument("--ranks", nargs="*", type=int, default=[500, 1000, 5000],
                      help="The ranks to compute for P@K")
 
@@ -250,6 +331,7 @@ if __name__ == "__main__":
 
     text, ann = read_files(args.input)
     for s in args.scoring:
-        score = benchmarck(text, ann, method=s, k_rank=args.ranks)
+        score = benchmarck(text, ann, args.output, method=s, beta=args.beta,
+                           k_rank=args.ranks)
         filename = os.path.join(args.output, f"score_{s}.csv")
         score.to_csv(filename, sep=";")

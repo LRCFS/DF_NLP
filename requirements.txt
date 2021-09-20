@@ -1,6 +1,9 @@
+matplotlib
+numpy
 pandas
 pyate
 pytest
 requests
+sklearn
 tqdm
 wheel

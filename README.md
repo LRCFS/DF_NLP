@@ -96,13 +96,17 @@ A training corpus can be used to benchmarking 5 ATE methods:
 - [Weirdness](https://www.researchgate.net/publication/221037471_University_of_Surrey_Participation_in_TREC8_Weirdness_Indexing_for_Logical_Document_Extrapolation_and_Retrieval_WILDER)
 
 Those ATE methods can be benchmarked using one or more [scoring methods](https://www.cambridge.org/core/journals/natural-language-engineering/article/keyword-extraction-issues-and-methods/84BFD5221E2CA86326E5430D03299711) from the following list:
-- **PRF**, which compute 3 scores for the extraction: its precision, recall and the F-Measure which balance the 2 previous features. 
+- **PRF**, which compute 3 scores for the extraction: its precision, recall and the F-Measure which balance the 2 previous features. The F-Measure requires the use of a parameter beta to give more importance to precision (beta < 1) or to recall (beta > 1).
 - **Precision@K**, which compute the precision for terms above the rank K.
 - **Bpref**, which evaluate the quantity of incorrect terms with an higher rank than correct ones.
 
 The default benchmark use the PRF scoring:
 ```bash
+# You can use the default value for beta (beta = 1)
 ./benchmarking.py ./path_to_the_input_dir/ ./path_to_the_output_dir/
+# Or provide your own value
+./benchmarking.py ./path_to_the_input_dir/ ./path_to_the_output_dir/ --beta 1.5
+
 ```
 
 But you can decide which scoring method to use:
