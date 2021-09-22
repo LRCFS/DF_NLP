@@ -4,10 +4,13 @@
 import argparse
 import json
 import os
+import re
 from typing import List
 
 import pandas as pd
+import spacy
 from pyate import TermExtraction, basic, combo_basic, cvalues, weirdness
+from tqdm import tqdm
 
 
 def read_corpus(corpus_path: str) -> List[str]:
@@ -48,21 +51,30 @@ def run_ate(method: str, single: bool, corpus: List[str]) -> pd.Series:
     Raises:
         ValueError: The value of `method` is not handled
     """
+    nlp = spacy.load("en_core_web_sm")
+
+    text = []
+    for doc in tqdm(list(nlp.pipe(corpus))):
+        doc = " ".join(token.lemma_ for token in doc)
+        doc = re.sub(r' (?=\W)', "", doc)
+        doc = re.sub("- ", "-", doc)
+        text.append(doc)
+
     if method == "Basic":
-        return basic(corpus, have_single_word=single,
-                     verbose=True).sort_values(ascending=False)
+        res = basic(text, have_single_word=single,
+                    verbose=True).sort_values(ascending=False)
     elif method == "Combo":
-        return combo_basic(corpus, have_single_word=single,
-                           verbose=True).sort_values(ascending=False)
+        res = combo_basic(text, have_single_word=single,
+                          verbose=True).sort_values(ascending=False)
     elif method == "Cvalue":
-        return cvalues(corpus, have_single_word=single,
-                       verbose=True).sort_values(ascending=False)
+        res = cvalues(text, have_single_word=single,
+                      verbose=True).sort_values(ascending=False)
     elif method == "Weirdness":
         general = TermExtraction.get_general_domain()
-        return weirdness(corpus, general,
-                         verbose=True).sort_values(ascending=False)
-    else:
-        raise ValueError(f"Unknown ATE method: {method}")
+        res = weirdness(text, general,
+                        verbose=True).sort_values(ascending=False)
+
+    return res[res > 0.0]
 
 
 if __name__ == "__main__":
@@ -70,7 +82,7 @@ if __name__ == "__main__":
     cli.add_argument("corpus_path", type=str, help="Path to the corpus file")
     cli.add_argument("output", type=str, help="Path to the output directory")
     cli.add_argument("--ate", nargs="*", type=str, default=["Weirdness"],
-                     choices=["Basic", "Combo", "Cvalue", "Weirdness"],
+                     choices=["Basic", "Combo", "Cvalues", "Weirdness"],
                      help="ATE methods to use")
 
     args = cli.parse_args()

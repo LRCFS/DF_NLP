@@ -3,18 +3,21 @@
 
 import argparse
 import os
+import re
 import sys
 from math import pow
 from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
+import spacy
 from matplotlib import pyplot
-from pyate import TermExtraction, basic, combo_basic, cvalues, weirdness
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_curve, auc
+from sklearn.metrics import auc, precision_recall_curve
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
+
+from DF_NLP import ate
 
 
 def read_files(directory: str) -> Tuple[List[str]]:
@@ -64,7 +67,15 @@ def read_files(directory: str) -> Tuple[List[str]]:
     annotation = df.loc[:, "Term"].str.lower().to_list()
     annotation = [a.translate(to_remove) for a in annotation]
 
-    return (text, annotation)
+    nlp = spacy.load("en_core_web_sm")
+    tmp = []
+    for doc in list(nlp.pipe(annotation)):
+        doc = " ".join(token.lemma_ for token in doc)
+        doc = re.sub(r' (?=\W)', "", doc)
+        doc = re.sub("- ", "-", doc)
+        tmp.append(doc)
+
+    return (text, tmp)
 
 
 def _prf_score(candidate: List[str], annotation: List[str],
@@ -211,7 +222,11 @@ def pr_curve(candidates: pd.Series, annotation: List[str],
     proba = proba[:, 1]
     # Computing PRF
     p, r, thresholds = precision_recall_curve(ytest, proba)
+    # Hide warning for div by zero
+    np.seterr(invalid="ignore")
     fmeasure = (1 + pow(beta, 2)) * (p*r / (pow(beta, 2)*p + r))
+    # Replace NaN by 0
+    np.nan_to_num(fmeasure, copy=True, nan=0.0, posinf=None, neginf=None)
     # Locate the index of the largest F-Measure
     ix = np.argmax(fmeasure)
     best = round(thresholds[ix], 3)
@@ -237,7 +252,7 @@ def pr_curve(candidates: pd.Series, annotation: List[str],
     # Save the plot
     pyplot.savefig(os.path.join(path, f"{ate}.png"))
 
-    return best
+    return float(best)
 
 
 def benchmarck(text: List[str], annotation: List[str], path: str,
@@ -263,8 +278,6 @@ def benchmarck(text: List[str], annotation: List[str], path: str,
         ValueError: If at least one `k_rank` is invalid.
         ValueError: If the scoring `method` is unknown.
     """
-    general = TermExtraction.get_general_domain()
-
     # Check validity of k rank(s)
     if (any(k <= 0 for k in k_rank)
             or any(not isinstance(k, int) for k in k_rank)):
@@ -284,31 +297,28 @@ def benchmarck(text: List[str], annotation: List[str], path: str,
 
     # Basic
     print("### Basic : Starting ###")
-    res = basic(text, have_single_word=True,
-                verbose=True).sort_values(ascending=False)
-    best = pr_curve(res, ann, "Basic", path, beta)
-    res = res[res >= best].index.str.lower().to_list()
+    res = ate.run_ate("Basic", True, text)
+    best = pr_curve(res, annotation, "Basic", path, beta)
+    res = res[res >= best].index.to_list()
     score.loc["Basic", ] = _scoring(method, res, annotation, beta, k_rank)
     print("### Basic : Done ###\n\n### Combo Basic : Starting ###")
     # Combo Basic
-    res = combo_basic(text, have_single_word=True,
-                      verbose=True).sort_values(ascending=False)
-    best = pr_curve(res, ann, "Combo_Basic", path, beta)
-    res = res[res >= best].index.str.lower().to_list()
+    res = ate.run_ate("Combo", True, text)
+    best = pr_curve(res, annotation, "Combo_Basic", path, beta)
+    res = res[res >= best].index.to_list()
     score.loc["Combo_Basic", ] = _scoring(method, res, annotation, beta,
                                           k_rank)
     print("### Combo Basic : Done ###\n\n### C-Value : Starting ###")
     # C-Value
-    res = cvalues(text, have_single_word=True,
-                  verbose=True).sort_values(ascending=False)
-    best = pr_curve(res, ann, "C-Value", path, beta)
-    res = res[res >= best].index.str.lower().to_list()
+    res = ate.run_ate("Cvalue", True, text)
+    best = pr_curve(res, annotation, "C-Value", path, beta)
+    res = res[res >= best].index.to_list()
     score.loc["C-Value", ] = _scoring(method, res, annotation, beta, k_rank)
     print("### C-Value : Done ###\n\n### Weirdness : Starting ###")
     # Weirdness
-    res = weirdness(text, general, verbose=True).sort_values(ascending=False)
-    best = pr_curve(res, ann, "Weirdness", path, beta)
-    res = res[res >= best].index.str.lower().to_list()
+    res = ate.run_ate("Weirdness", True, text)
+    best = pr_curve(res, annotation, "Weirdness", path, beta)
+    res = res[res >= best].index.to_list()
     score.loc["Weirdness", ] = _scoring(method, res, annotation, beta, k_rank)
     print("### Weirdness ###")
 
