@@ -43,14 +43,17 @@ def read_files(directory: str) -> Tuple[List[str]]:
 
     to_remove = dict.fromkeys((ord(c) for c in u"\xa0\n\t"))
 
+    nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+
     text = []
     df = pd.DataFrame(columns=["Type", "Info", "Term"])
     for f_name in tqdm(file_list):
         # Extract strings from the .txt files
         if f_name.endswith(".txt"):
             with open(f_name, "r") as f:
-                tmp = f.read()
-            text.append(tmp.translate(to_remove))
+                doc = nlp(f.read())
+            doc = " ".join(token.lemma_ for token in doc)
+            text.append(doc.translate(to_remove))
         # Extract annotation as DataFrame from the .ann files
         elif f_name.endswith(".ann"):
             tmp = pd.read_csv(f_name, header=0,
@@ -63,19 +66,15 @@ def read_files(directory: str) -> Tuple[List[str]]:
     # Remove row which are not terms and duplicates
     df = df.loc[df.loc[:, "Type"].str.startswith("T"), ]
     df = df.drop_duplicates("Term")
+    # Lemmatize
+    df.loc[:, "Term"] = df.loc[:, "Term"].apply(
+        lambda x: " ".join(token.lemma_ for token in nlp(x))
+    )
 
     annotation = df.loc[:, "Term"].str.lower().to_list()
     annotation = [a.translate(to_remove) for a in annotation]
 
-    nlp = spacy.load("en_core_web_sm")
-    tmp = []
-    for doc in list(nlp.pipe(annotation)):
-        doc = " ".join(token.lemma_ for token in doc)
-        doc = re.sub(r' (?=\W)', "", doc)
-        doc = re.sub("- ", "-", doc)
-        tmp.append(doc)
-
-    return (text, tmp)
+    return (text, annotation)
 
 
 def _prf_score(candidate: List[str], annotation: List[str],
