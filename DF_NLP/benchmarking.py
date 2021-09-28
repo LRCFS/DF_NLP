@@ -43,7 +43,7 @@ def read_files(directory: str) -> Tuple[List[str]]:
 
     to_remove = dict.fromkeys((ord(c) for c in u"\xa0\n\t"))
 
-    nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+    nlp = ate.setup_spacy()
 
     text = []
     df = pd.DataFrame(columns=["Type", "Info", "Term"])
@@ -51,8 +51,7 @@ def read_files(directory: str) -> Tuple[List[str]]:
         # Extract strings from the .txt files
         if f_name.endswith(".txt"):
             with open(f_name, "r") as f:
-                doc = nlp(f.read())
-            doc = " ".join(token.lemma_ for token in doc)
+                doc = ate.text_process(nlp, f.read())
             text.append(doc.translate(to_remove))
         # Extract annotation as DataFrame from the .ann files
         elif f_name.endswith(".ann"):
@@ -68,11 +67,11 @@ def read_files(directory: str) -> Tuple[List[str]]:
     df = df.drop_duplicates("Term")
     # Lemmatize
     df.loc[:, "Term"] = df.loc[:, "Term"].apply(
-        lambda x: " ".join(token.lemma_ for token in nlp(x))
+        lambda x: ate.text_process(nlp, x)
     )
 
-    annotation = df.loc[:, "Term"].str.lower().to_list()
-    annotation = [a.translate(to_remove) for a in annotation]
+    annotation = df.loc[:, "Term"].to_list()
+    annotation = [a.translate(to_remove) for a in annotation if a]
 
     return (text, annotation)
 
