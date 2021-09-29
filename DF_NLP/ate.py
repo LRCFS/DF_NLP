@@ -25,6 +25,7 @@ def setup_spacy():
     nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
     # Update the list of stop words
     nlp.Defaults.stop_words |= spacy_update.SCI_PAPER_STOP
+    nlp.Defaults.stop_words |= spacy_update.GENERIC_STOP
     nlp.Defaults.stop_words |= spacy_update.DIGTAL_FORENSICS_STOP
     # Update lemmatization rules
     lookup = nlp.get_pipe("lemmatizer").lookups
@@ -49,6 +50,8 @@ def text_process(nlp, text: str) -> str:
     doc = nlp(" ".join(tok.lemma_ for tok in doc if not tok.is_punct))
     # Remove stopwords
     doc = " ".join(tok.text for tok in doc if not tok.is_stop)
+    # Fix duplicates words
+    doc = re.sub(r'\b(\w+) \1\b', r'\1', doc)
 
     return doc.lower()
 
