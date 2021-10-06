@@ -15,18 +15,23 @@ from tqdm import tqdm
 from DF_NLP import spacy_update
 
 
-def setup_spacy():
+def setup_spacy(benchmark: bool):
     """Setup the SpaCy model used to process text.
+
+    Args:
+        benchmark: Wether to setup spacy for benchmark mode (without
+            digital forensics stopwords) or not
 
     Returns:
         Spacy English model.
     """
     # Load model
     nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
-    # Update the list of stop words
-    nlp.Defaults.stop_words |= spacy_update.SCI_PAPER_STOP
-    nlp.Defaults.stop_words |= spacy_update.GENERIC_STOP
-    nlp.Defaults.stop_words |= spacy_update.DIGTAL_FORENSICS_STOP
+    # Update the list of stop words if not in a benchmark context
+    if not benchmark:
+        nlp.Defaults.stop_words |= spacy_update.SCI_PAPER_STOP
+        nlp.Defaults.stop_words |= spacy_update.GENERIC_STOP
+        nlp.Defaults.stop_words |= spacy_update.DIGTAL_FORENSICS_STOP
     # Update lemmatization rules
     lookup = nlp.get_pipe("lemmatizer").lookups
     lookup.get_table("lemma_exc")["noun"].pop("data")
@@ -34,12 +39,14 @@ def setup_spacy():
     return nlp
 
 
-def text_process(nlp, text: str) -> str:
+def text_process(nlp, text: str, benchmark: bool) -> str:
     """Override the SpaCy part of PyATE to process text.
 
     Args:
         nlp: English model of SpaCy.
         text: Text to process.
+        benchmark: Wether to setup spacy for benchmark mode (without
+            digital forensics stopwords) or not.
 
     Returns:
         Lemmatized text without stopwords.
@@ -50,7 +57,11 @@ def text_process(nlp, text: str) -> str:
     doc = nlp(" ".join(tok.lemma_ for tok in doc if not tok.is_punct))
     # Remove stopwords
     doc = " ".join(tok.text for tok in doc if not tok.is_stop)
-    # Fix duplicates words
+    # Reduce similar terms if not in a benchmark context
+    if not benchmark:
+        for k, v in spacy_update.DUPLICATES.items():
+            doc = re.sub(k, v, doc)
+    # Fix continuous duplicates words
     doc = re.sub(r'\b(\w+) \1\b', r'\1', doc)
 
     return doc.lower()
@@ -69,15 +80,15 @@ def read_corpus(corpus_path: str) -> List[str]:
         corpus = json.load(f)
 
     text = []
-    nlp = setup_spacy()
+    nlp = setup_spacy(False)
 
     for ref in tqdm(corpus.values()):
         if ref.get("full_text"):
             with open(ref.get("full_text"), "r") as f:
-                doc = text_process(nlp, f.read())
+                doc = text_process(nlp, f.read(), False)
             text.append(doc)
         elif ref.get("abstract"):
-            doc = text_process(nlp, ref.get("abstract"))
+            doc = text_process(nlp, ref.get("abstract"), False)
             text.append(doc)
 
     return text
