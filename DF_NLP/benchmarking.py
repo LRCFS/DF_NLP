@@ -6,7 +6,7 @@ import os
 import re
 import sys
 from math import pow
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, NoReturn
 
 import numpy as np
 import pandas as pd
@@ -55,8 +55,7 @@ def read_files(directory: str) -> Tuple[List[str]]:
             text.append(doc.translate(to_remove))
         # Extract annotation as DataFrame from the .ann files
         elif f_name.endswith(".ann"):
-            tmp = pd.read_csv(f_name, header=0,
-                              names=["Type", "Info", "Term"],
+            tmp = pd.read_csv(f_name, names=["Type", "Info", "Term"],
                               sep="\t", dtype=str)
             df = df.append(tmp, ignore_index=True)
         else:
@@ -188,69 +187,44 @@ def _scoring(method: str, candidate: List[str], annotation: List[str],
 
 
 def pr_curve(candidates: pd.Series, annotation: List[str],
-             ate: str, path: str, beta: int = 1) -> float:
+             ate: str, path: str) -> NoReturn:
     """Write a Precision-Recall curve plot and return the best threshold.
 
     Args:
         candidates: List of extracted terms from an ATE method to
             benchmark.
         annotation: The terms identified by the authors.
-        beta: Parameter of F-Measure and allowing to give more
-            importance to precision (<1) or to recall (>1).
         ate: ATE method used
         path: Directory where the plot should be saved.
-
-    Returns
-        The best threshold to use according to the chosen value of `beta`.
     """
     # Clear plot
     pyplot.clf()
+    pyplot.figure(figsize=(6, 6))
 
-    x = np.reshape(candidates.values, (len(candidates), 1))
     y = [1 if c in annotation else 0 for c in candidates.index]
+    scores = candidates.values
 
-    # Split into train/test sets
-    xtrain, xtest, ytrain, ytest = train_test_split(x, y, test_size=0.5,
-                                                    random_state=2)
-    # Fit a model
-    model = LogisticRegression(solver='lbfgs')
-    model.fit(xtrain, ytrain)
-    # Predict probabilities
-    proba = model.predict_proba(xtest)
-    proba = proba[:, 1]
     # Computing PRF
-    p, r, thresholds = precision_recall_curve(ytest, proba)
-    # Hide warning for div by zero
-    np.seterr(invalid="ignore")
-    fmeasure = (1 + pow(beta, 2)) * (p*r / (pow(beta, 2)*p + r))
-    # Replace NaN by 0
-    np.nan_to_num(fmeasure, copy=True, nan=0.0, posinf=None, neginf=None)
-    # Locate the index of the largest F-Measure
-    ix = np.argmax(fmeasure)
-    best = round(thresholds[ix], 3)
-    auc_val = round(auc(r, p), 2)
-    print(f"Best threshold={best}  AUC={auc_val}")
+    precision, recall, _ = precision_recall_curve(y, scores)
+    # Compute AUC
+    auc_val = round(auc(recall, precision), 2)
     # Plot the precision-recall curves
-    no_skill = len([y for y in ytest if y == 1]) / len(ytest)
-    pyplot.plot([0, 1], [no_skill, no_skill], linestyle="--", color="red",
-                label="No Skill", zorder=0)
-    pyplot.plot(r, p, marker=".", color="royalblue",
-                label=f"Logistic (AUC={auc_val})", zorder=-1)
-    pyplot.scatter(r[ix], p[ix], marker="o", color="black", label="Best",
-                   zorder=1)
-    pyplot.annotate(f"Best Threshold = {best}", xy=(r[ix], p[ix]),
-                    xytext=(5, 2), textcoords='offset points', ha='right',
-                    va='bottom')
+    pyplot.plot([0, 1], [1, 0], linestyle="--", color="red",
+                label="Random", zorder=0)
+    pyplot.plot(recall, precision, marker=".", color="royalblue",
+                label=f"{ate} (AUC={auc_val})", zorder=-1)
+
     # Axis labels
     pyplot.xlabel("Recall")
     pyplot.ylabel("Precision")
-    pyplot.title(f"Precision-Recall curve for {ate} (Beta = {beta})")
+    pyplot.title(f"Precision-Recall curve for {ate}")
+    # Axis limit
+    pyplot.xlim(0.0, 1.0)
+    pyplot.ylim(0.0, 1.0)
     # Show the legend
     pyplot.legend()
     # Save the plot
     pyplot.savefig(os.path.join(path, f"{ate}.png"))
-
-    return float(best)
 
 
 def benchmarck(text: List[str], annotation: List[str], path: str,
@@ -296,27 +270,27 @@ def benchmarck(text: List[str], annotation: List[str], path: str,
     # Basic
     print("### Basic : Starting ###")
     res = ate.run_ate("Basic", True, text)
-    best = pr_curve(res, annotation, "Basic", path, beta)
-    res = res[res >= best].index.to_list()
+    pr_curve(res, annotation, "Basic", path)
+    res = res.index.to_list()
     score.loc["Basic", ] = _scoring(method, res, annotation, beta, k_rank)
     print("### Basic : Done ###\n\n### Combo Basic : Starting ###")
     # Combo Basic
     res = ate.run_ate("Combo", True, text)
-    best = pr_curve(res, annotation, "Combo_Basic", path, beta)
-    res = res[res >= best].index.to_list()
+    pr_curve(res, annotation, "Combo_Basic", path)
+    res = res.index.to_list()
     score.loc["Combo_Basic", ] = _scoring(method, res, annotation, beta,
                                           k_rank)
     print("### Combo Basic : Done ###\n\n### C-Value : Starting ###")
     # C-Value
     res = ate.run_ate("Cvalue", True, text)
-    best = pr_curve(res, annotation, "C-Value", path, beta)
-    res = res[res >= best].index.to_list()
+    pr_curve(res, annotation, "C-Value", path)
+    res = res.index.to_list()
     score.loc["C-Value", ] = _scoring(method, res, annotation, beta, k_rank)
     print("### C-Value : Done ###\n\n### Weirdness : Starting ###")
     # Weirdness
     res = ate.run_ate("Weirdness", True, text)
-    best = pr_curve(res, annotation, "Weirdness", path, beta)
-    res = res[res >= best].index.to_list()
+    pr_curve(res, annotation, "Weirdness", path)
+    res = res.index.to_list()
     score.loc["Weirdness", ] = _scoring(method, res, annotation, beta, k_rank)
     print("### Weirdness ###")
 
