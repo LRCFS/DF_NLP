@@ -8,13 +8,13 @@ import fixture
 
 @pytest.mark.parametrize("param", [
     {"in": ["a", "b", "c", "d", "e", "f"], "out":{
-        "Precision": 1/3, "Recall": 1.0, "F_Measure": 0.7142857142857144}},
+        "Precision": 1/3, "Recall": 1.0, "F_Measure": 0.5}},
     {"in": ["c"], "out":{
-        "Precision": 1.0, "Recall": 0.5, "F_Measure": 5/9}},
+        "Precision": 1.0, "Recall": 0.5, "F_Measure": 2/3}},
     {"in": ["c", "e"], "out":{
         "Precision": 1.0, "Recall": 1.0, "F_Measure": 1.0}},
     {"in": ["a", "b", "d", "e", "f"], "out":{
-        "Precision": 0.2, "Recall": 0.5, "F_Measure": 0.38461538461538464}},
+        "Precision": 0.2, "Recall": 0.5, "F_Measure": 0.28571428571428575}},
     {"in": ["a", "b", "d", "f"], "out":{
         "Precision": 0.0, "Recall": 0.0, "F_Measure": 0.0}},
 ])
